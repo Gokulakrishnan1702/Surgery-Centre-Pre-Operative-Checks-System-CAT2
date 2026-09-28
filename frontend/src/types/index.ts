@@ -178,6 +178,35 @@ export interface ChecklistItem {
   scheduled_date?: string;
   patient_risk_level?: RiskLevel;
   evidence_count?: number;
+
+  // Extended 21 fields for evidence validation engine
+  checklist_event_id?: string;
+  checklist_step_id?: string;
+  step_name?: string;
+  category?: string;
+  required_evidence?: boolean;
+  evidence_status?: 'VALID' | 'INVALID' | 'MISSING' | 'EXPIRED' | 'CONFLICTING' | 'UNVERIFIED';
+  responsible_role?: UserRole;
+  assigned_user?: string;
+  timestamp?: string;
+  verification_status?: string;
+  human_confirmation?: boolean;
+  exception_status?: string;
+  exception_reason?: string;
+  override_status?: string;
+  override_reason?: string;
+  created_at?: string;
+  rule_details?: {
+    rule: string;
+    risk_level: RiskLevel;
+    required_evidence: string;
+    responsible_role: UserRole;
+    human_confirmation: string;
+    override: string;
+    validity?: string;
+    evidence_validity?: string;
+    source: string;
+  };
 }
 
 export interface EvidenceRecord {
@@ -616,4 +645,151 @@ export interface PatientHistoryResponse {
   summary: PatientHistorySummary;
   timeline: PatientActivityEvent[];
   grouped_timeline: Record<string, PatientActivityEvent[]>;
+}
+
+export interface ChecklistEvent {
+  id: string;
+  patient_id: string;
+  patient_name?: string;
+  step_id: string;
+  step_name: string;
+  category: string;
+  event_type:
+    | 'CREATED'
+    | 'EVIDENCE_UPLOADED'
+    | 'EVIDENCE_VALIDATED'
+    | 'VERIFIED'
+    | 'BLOCKED'
+    | 'EXCEPTION_CREATED'
+    | 'EXCEPTION_RESOLVED'
+    | 'OVERRIDE_REQUESTED'
+    | 'OVERRIDE_APPROVED'
+    | 'OVERRIDE_REJECTED'
+    | 'HUMAN_CONFIRMED'
+    | 'ROLE_MISMATCH_ATTEMPTED';
+  status: ChecklistStatus;
+  evidence_id?: string;
+  evidence_status?: 'VALID' | 'INVALID' | 'MISSING' | 'EXPIRED' | 'CONFLICTING' | 'UNVERIFIED';
+  responsible_role: UserRole;
+  user_id?: string;
+  user_name?: string;
+  user_role?: UserRole;
+  timestamp: string;
+  exception_reason?: string;
+  override_reason?: string;
+  human_confirmation: boolean;
+  is_baseline?: boolean;
+  metadata?: Record<string, any>;
+}
+
+export interface EvidenceValidationCriteria {
+  exists: boolean;
+  correct_type: boolean;
+  step_matched: boolean;
+  role_authorized: boolean;
+  timestamp_valid: boolean;
+  unexpired: boolean;
+  human_reviewed: boolean;
+}
+
+export interface EvidenceValidationDetails {
+  evidence_id: string;
+  checklist_item_id: string;
+  filename: string;
+  evidence_type: EvidenceType;
+  overall_status: 'VALID' | 'INVALID' | 'MISSING' | 'EXPIRED' | 'CONFLICTING' | 'UNVERIFIED';
+  criteria: EvidenceValidationCriteria;
+  messages: string[];
+  validated_at: string;
+}
+
+export interface PreOpReadinessGate {
+  patient_id: string;
+  patient_name: string;
+  critical_steps_total: number;
+  critical_steps_verified: number;
+  valid_evidence_total: number;
+  valid_evidence_count: number;
+  human_confirmations_total: number;
+  human_confirmations_count: number;
+  open_exceptions_count: number;
+  overrides_count: number;
+  consent_status: 'VERIFIED' | 'PENDING' | 'MISSING';
+  privacy_status: 'PROTECTED';
+  readiness_status: 'AWAITING_FINAL_HUMAN_CONFIRMATION' | 'INCOMPLETE' | 'EXCEPTIONS_BLOCKING' | 'FINAL_CLEARANCE_GRANTED';
+  clinical_safety_notice: string;
+  final_approval?: {
+    approved: boolean;
+    approved_by?: string;
+    approved_at?: string;
+    notes?: string;
+  };
+}
+
+export interface ErrorAnalysisItem {
+  id: string;
+  error_type: string;
+  baseline_count: number;
+  prototype_count: number;
+  difference: number;
+  reduction_percentage: string;
+  root_cause: string;
+  corrective_action: string;
+  category: 'EVIDENCE' | 'ROLE' | 'EXCEPTION' | 'OVERRIDE' | 'COMPLIANCE';
+}
+
+export interface SafetyLabTestCase {
+  id: string;
+  title: string;
+  description: string;
+  input_scenario: string;
+  expected_result: string;
+  actual_result?: string;
+  status: 'PASS' | 'FAIL' | 'NOT_RUN';
+  last_run?: string;
+  tested_by?: string;
+  details?: string;
+}
+
+export interface StakeholderTask {
+  id: string;
+  role: UserRole;
+  persona_name: string;
+  task_title: string;
+  task_description: string;
+  task_completed: boolean;
+  completion_time_seconds: number;
+  errors_encountered: number;
+  usability_score: number;
+  qualitative_feedback: string;
+}
+
+export interface StakeholderValidationSummary {
+  total_participants: number;
+  overall_usability_score: number;
+  task_completion_rate: number;
+  average_completion_time_seconds: number;
+  feedback_highlights: string[];
+  tasks: StakeholderTask[];
+}
+
+export interface DeploymentChecklistItem {
+  id: string;
+  title: string;
+  description: string;
+  verified: boolean;
+  evidence: string;
+}
+
+export interface DeploymentReadinessReport {
+  overall_status: 'READY FOR CONTROLLED DEMONSTRATION';
+  disclaimer: string;
+  evaluation_date: string;
+  categories: {
+    security: DeploymentChecklistItem[];
+    data: DeploymentChecklistItem[];
+    safety: DeploymentChecklistItem[];
+    privacy: DeploymentChecklistItem[];
+    monitoring: DeploymentChecklistItem[];
+  };
 }

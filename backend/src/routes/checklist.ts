@@ -149,4 +149,41 @@ router.post('/:id/confirm', authenticateToken, requirePermission('CONFIRM_HIGH_R
   }
 });
 
+// GET /api/checklist/:id/rule (Why is this required? rule engine)
+router.get('/:id/rule', authenticateToken, requirePermission('VIEW_CHECKLIST'), (req: AuthRequest, res: Response) => {
+  const id = getParam(req.params.id);
+  const item = store.checklistItems.find(i => i.id === id);
+  if (!item) return res.status(404).json({ error: 'Checklist item not found' });
+
+  // Return rule details or compute structured safety rule
+  const rule = item.rule_details || {
+    rule: `System Safety Rule: Mandatory verification of "${item.name}" prior to proceeding to surgical timeout.`,
+    risk_level: item.risk_level,
+    required_evidence: item.requires_evidence ? `${item.name} supporting diagnostic record / EMR extract` : 'Not mandated for low-risk tier',
+    responsible_role: item.required_role,
+    human_confirmation: item.requires_human_confirmation ? 'REQUIRED: Explicit clinical sign-off required' : 'Optional / Self-verification permitted',
+    override: item.risk_level === 'CRITICAL' || item.risk_level === 'HIGH' ? 'Senior authorization required (Lead Surgeon or CMO) with dual justification' : 'Clinical justification required',
+    evidence_validity: 'Document must be authentic, cryptographic SHA-256 verified, within valid validity window (<72h), and not conflicting with EMR.',
+    source: 'SurgiGate Configurable Hospital Safety Rule Engine (System Safety Rule)'
+  };
+
+  return res.json({
+    item_id: item.id,
+    item_name: item.name,
+    rule
+  });
+});
+
+// POST /api/checklist/:id/validate-evidence
+router.post('/:id/validate-evidence', authenticateToken, requirePermission('VIEW_CHECKLIST'), (req: AuthRequest, res: Response) => {
+  const id = getParam(req.params.id);
+  const { evidenceId } = req.body;
+  try {
+    const validation = store.validateEvidence(id, evidenceId);
+    return res.json(validation);
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
 export default router;

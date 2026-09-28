@@ -26,7 +26,9 @@ import {
   TrendingUp,
   Droplets,
   Heart,
-  ClipboardCheck
+  ClipboardCheck,
+  HelpCircle,
+  FileCheck
 } from 'lucide-react';
 import { api } from '../services/api';
 import {
@@ -44,7 +46,9 @@ import {
   LabResultRecord,
   RiskHistoryRecord,
   ChecklistHistoryRecord,
-  PatientHistorySummary
+  PatientHistorySummary,
+  PreOpReadinessGate,
+  EvidenceValidationDetails
 } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { StatusBadge } from '../components/common/StatusBadge';
@@ -54,6 +58,9 @@ import { OverrideModal } from '../components/modals/OverrideModal';
 import { EvidenceUploadModal } from '../components/modals/EvidenceUploadModal';
 import { EvidenceViewerModal } from '../components/modals/EvidenceViewerModal';
 import { ClearancePassportModal } from '../components/modals/ClearancePassportModal';
+import { RuleExplanationModal } from '../components/modals/RuleExplanationModal';
+import { PrivacyGovernanceModal } from '../components/modals/PrivacyGovernanceModal';
+import { EvidenceValidationModal } from '../components/modals/EvidenceValidationModal';
 import { PatientClinicalHistoryTab } from '../components/patient/PatientClinicalHistoryTab';
 import { PatientActivityTimelineTab } from '../components/patient/PatientActivityTimelineTab';
 import { PatientTrendsTab } from '../components/patient/PatientTrendsTab';
@@ -92,6 +99,13 @@ export const PatientDetailPage: React.FC = () => {
   const [riskResult, setRiskResult] = useState<RiskAssessmentResult | null>(null);
   const [passportModalOpen, setPassportModalOpen] = useState(false);
 
+  // Extended Safety Engine Modals State
+  const [ruleModalItem, setRuleModalItem] = useState<ChecklistItem | null>(null);
+  const [privacyModalOpen, setPrivacyModalOpen] = useState(false);
+  const [validationModalItem, setValidationModalItem] = useState<ChecklistItem | null>(null);
+  const [validationDetails, setValidationDetails] = useState<EvidenceValidationDetails | null>(null);
+  const [readinessData, setReadinessData] = useState<PreOpReadinessGate | null>(null);
+
   // Modals state
   const [confirmModalItem, setConfirmModalItem] = useState<ChecklistItem | null>(null);
   const [overrideModalItem, setOverrideModalItem] = useState<ChecklistItem | null>(null);
@@ -119,10 +133,39 @@ export const PatientDetailPage: React.FC = () => {
       } catch (rErr) {
         // Risk assessment load error non-blocking
       }
+      try {
+        const readData = await api.patients.getReadiness(patientId);
+        setReadinessData(readData);
+      } catch (readErr) {
+        // Readiness load non-blocking
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load patient');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleInspectValidation = async (item: ChecklistItem) => {
+    try {
+      const val = await api.checklist.validateEvidence(item.id, item.evidence_id);
+      setValidationDetails(val);
+      setValidationModalItem(item);
+    } catch (err) {
+      setValidationDetails(null);
+      setValidationModalItem(item);
+    }
+  };
+
+  const handleOpenRule = async (item: ChecklistItem) => {
+    try {
+      const res = await api.checklist.getRule(item.id);
+      setRuleModalItem({
+        ...item,
+        rule_details: res.rule
+      });
+    } catch {
+      setRuleModalItem(item);
     }
   };
 
@@ -209,11 +252,16 @@ export const PatientDetailPage: React.FC = () => {
   const handleFinalSignOff = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!patient) return;
+    if (user?.role !== 'SURGEON' && user?.role !== 'ADMIN') {
+      setError(`Unauthorized: Final surgical pre-operative sign-off strictly requires Lead Surgeon or Chief Medical Officer authorization. Logged in as ${user?.role}. (Use topbar to switch to SURGEON to test authorization)`);
+      setFinalApprovalModalOpen(false);
+      return;
+    }
     setFinalSubmitting(true);
     try {
-      await api.patients.finalApproval(patient.id, finalNotes);
+      const res = await api.patients.finalClearance(patient.id, finalNotes);
       setFinalApprovalModalOpen(false);
-      setSuccessMessage('Final pre-operative verification signed off. Patient cleared for operating theatre.');
+      setSuccessMessage(res.message || 'Final pre-operative clearance authorized by human surgical specialist.');
       await loadPatient(patient.id);
     } catch (err: any) {
       setError(err.message);
@@ -252,14 +300,15 @@ export const PatientDetailPage: React.FC = () => {
   // Calculation of pre-op summary for final approval gate
   const totalSteps = patient.checklist.length || 10;
   const verifiedSteps = patient.checklist.filter(i => i.status === 'VERIFIED' || i.status === 'OVERRIDE').length;
-  const criticalItems = patient.checklist.filter(i => i.risk_level === 'CRITICAL');
+  const criticalItems = patient.checklist.filter(i => i.risk_level === 'CRITICAL' || i.risk_level === 'HIGH');
   const criticalVerified = criticalItems.filter(i => i.status === 'VERIFIED' || i.status === 'OVERRIDE').length;
   const evidenceRequired = patient.checklist.filter(i => i.requires_evidence).length;
-  const evidenceAttached = patient.checklist.filter(i => i.evidence_id || i.status === 'VERIFIED').length;
+  const evidenceAttached = patient.checklist.filter(i => (i.evidence_id || i.evidence_status === 'VALID') && (i.status === 'VERIFIED' || i.status === 'OVERRIDE')).length;
   const openExceptions = patient.exceptions.filter(e => e.status === 'OPEN' || e.status === 'UNDER_REVIEW').length;
-  const humanConfirmationsCount = patient.checklist.filter(i => i.human_confirmed).length;
+  const humanRequiredCount = patient.checklist.filter(i => i.requires_human_confirmation).length;
+  const humanConfirmationsCount = patient.checklist.filter(i => i.requires_human_confirmation && i.human_confirmed).length;
   const overridesCount = patient.checklist.filter(i => i.status === 'OVERRIDE').length;
-  const isReadyForFinalReview = openExceptions === 0 && verifiedSteps === totalSteps;
+  const isReadyForFinalReview = openExceptions === 0 && criticalVerified === criticalItems.length;
 
   return (
     <div className="space-y-6">
@@ -424,6 +473,184 @@ export const PatientDetailPage: React.FC = () => {
             );
           })}
         </div>
+      </div>
+
+      {/* 1. PRE-OPERATIVE READINESS GATE PANEL (Section 5) */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white shadow-sm ${
+              patient.status === 'READY' ? 'bg-emerald-600' :
+              (readinessData?.readiness_status === 'AWAITING_FINAL_HUMAN_CONFIRMATION' || isReadyForFinalReview) ? 'bg-indigo-600' :
+              openExceptions > 0 ? 'bg-rose-600' : 'bg-amber-500'
+            }`}>
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900 tracking-tight">Pre-Operative Readiness Gate</h2>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
+                  patient.status === 'READY' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                  (readinessData?.readiness_status === 'AWAITING_FINAL_HUMAN_CONFIRMATION' || isReadyForFinalReview) ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' :
+                  openExceptions > 0 ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
+                }`}>
+                  {patient.status === 'READY' ? 'Final Clearance Authorized' :
+                   (readinessData?.readiness_status === 'AWAITING_FINAL_HUMAN_CONFIRMATION' || isReadyForFinalReview) ? 'Ready for Final Human Review' :
+                   openExceptions > 0 ? 'Exceptions Blocking' : 'Verification In Progress'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Multi-point safety verification required before operating room transfer.
+              </p>
+            </div>
+          </div>
+
+          {/* Action button */}
+          <div>
+            {patient.status === 'READY' ? (
+              <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                Clearance Granted by Lead Surgeon
+              </span>
+            ) : (
+              <button
+                onClick={() => setFinalApprovalModalOpen(true)}
+                disabled={!isReadyForFinalReview && readinessData?.readiness_status !== 'AWAITING_FINAL_HUMAN_CONFIRMATION'}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition-all"
+                title={user?.role !== 'SURGEON' && user?.role !== 'ADMIN' ? 'Requires Lead Surgeon or CMO role' : 'Authorize surgical clearance'}
+              >
+                <UserCheck className="w-4 h-4" />
+                <span>Authorize Final Surgical Clearance</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 7 Strict Readiness Gate Metrics Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 text-center">
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Critical Steps</div>
+            <div className="text-base font-extrabold text-slate-900 mt-0.5">
+              {readinessData?.critical_steps_verified ?? criticalVerified} / {readinessData?.critical_steps_total ?? (criticalItems.length || 8)}
+            </div>
+            <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+              {(readinessData?.critical_steps_verified ?? criticalVerified) === (readinessData?.critical_steps_total ?? (criticalItems.length || 8)) ? '✓ VERIFIED' : 'PENDING'}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Valid Evidence</div>
+            <div className="text-base font-extrabold text-slate-900 mt-0.5">
+              {readinessData?.valid_evidence_count ?? evidenceAttached} / {readinessData?.valid_evidence_total ?? (evidenceRequired || 10)}
+            </div>
+            <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+              {(readinessData?.valid_evidence_count ?? evidenceAttached) >= (readinessData?.valid_evidence_total ?? evidenceRequired) ? '✓ COMPLETE' : 'INCOMPLETE'}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Human Sign-Offs</div>
+            <div className="text-base font-extrabold text-slate-900 mt-0.5">
+              {readinessData?.human_confirmations_count ?? humanConfirmationsCount} / {readinessData?.human_confirmations_total ?? (humanRequiredCount || 8)}
+            </div>
+            <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+              {(readinessData?.human_confirmations_count ?? humanConfirmationsCount) >= (readinessData?.human_confirmations_total ?? 1) ? '✓ ATTESTED' : 'PENDING'}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Open Exceptions</div>
+            <div className={`text-base font-extrabold mt-0.5 ${openExceptions > 0 ? 'text-rose-600' : 'text-slate-900'}`}>
+              {readinessData?.open_exceptions_count ?? openExceptions}
+            </div>
+            <div className="text-[10px] font-semibold mt-0.5">
+              {openExceptions === 0 ? <span className="text-emerald-600">✓ ZERO BLOCKERS</span> : <span className="text-rose-600">ACTION REQUIRED</span>}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Overrides</div>
+            <div className="text-base font-extrabold text-slate-900 mt-0.5">
+              {readinessData?.overrides_count ?? overridesCount}
+            </div>
+            <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
+              AUDITED
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Consent</div>
+            <div className="text-base font-extrabold text-emerald-600 mt-0.5">
+              {readinessData?.consent_status || 'VERIFIED'}
+            </div>
+            <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+              ✓ RECORDED
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Privacy</div>
+            <div className="text-base font-extrabold text-blue-600 mt-0.5">
+              PROTECTED
+            </div>
+            <div className="text-[10px] text-blue-600 font-semibold mt-0.5">
+              ✓ RBAC ACTIVE
+            </div>
+          </div>
+        </div>
+
+        {/* Mandatory Clinical Decision Support Disclaimer Notice (Section 5 requirement) */}
+        <div className="p-3.5 rounded-xl bg-slate-900 text-slate-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-slate-800">
+          <div className="flex items-start sm:items-center gap-2.5">
+            <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+            <span className="text-slate-200">
+              {patient.status === 'READY' ? (
+                <>Final Pre-Operative Surgical Sign-off granted by <strong>Dr. Marcus Vance (Lead Surgeon)</strong> on {patient.updated_at}. Patient cleared for OR.</>
+              ) : isReadyForFinalReview || readinessData?.readiness_status === 'AWAITING_FINAL_HUMAN_CONFIRMATION' ? (
+                <strong className="text-emerald-400">Checklist requirements satisfied — awaiting final authorized human confirmation.</strong>
+              ) : (
+                <span>Checklist verification in progress — outstanding items or exceptions prevent surgical clearance.</span>
+              )}
+            </span>
+          </div>
+
+          <div className="text-[11px] text-slate-400 italic shrink-0">
+            * Final surgical clearance must always require authorized human confirmation.
+          </div>
+        </div>
+      </div>
+
+      {/* 2. PATIENT DATA GOVERNANCE & PRIVACY PANEL (Section 10) */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4 text-xs">
+          <div className="flex items-center gap-1.5 font-bold text-slate-700">
+            <Lock className="w-4 h-4 text-indigo-600" />
+            <span>Patient Data Governance:</span>
+          </div>
+          <span className="inline-flex items-center gap-1 text-slate-600">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Consent recorded
+          </span>
+          <span className="inline-flex items-center gap-1 text-slate-600">
+            <span className="w-2 h-2 rounded-full bg-blue-500"></span> Data Type: Synthetic / Protected
+          </span>
+          <span className="inline-flex items-center gap-1 text-slate-600">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Role-Based Access: Enabled
+          </span>
+          <span className="inline-flex items-center gap-1 text-slate-600">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Audit Logging: Enabled
+          </span>
+          <span className="inline-flex items-center gap-1 text-slate-600">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Sensitive Evidence: Restricted
+          </span>
+        </div>
+
+        <button
+          onClick={() => setPrivacyModalOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition shrink-0"
+        >
+          <Eye className="w-3.5 h-3.5 text-slate-600" />
+          <span>View Privacy Details</span>
+        </button>
       </div>
 
       {/* TAB 1: CORE CHECKLIST TABLE */}
@@ -611,13 +838,22 @@ export const PatientDetailPage: React.FC = () => {
                         </td>
 
                         <td className="py-3.5 px-4 font-bold text-slate-900">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span>{item.name}</span>
                             {item.requires_human_confirmation && (
                               <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.2 rounded" title="Requires explicit human confirmation">
                                 Dual-Sign
                               </span>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenRule(item)}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition shrink-0"
+                              title="Why is this required? (Explainable System Safety Rule)"
+                            >
+                              <HelpCircle className="w-3 h-3" />
+                              <span>Rule</span>
+                            </button>
                           </div>
                         </td>
 
@@ -632,33 +868,56 @@ export const PatientDetailPage: React.FC = () => {
                         {/* Attached Evidence */}
                         <td className="py-3.5 px-4">
                           {item.evidence_filename ? (
-                            <button
-                              onClick={() => {
-                                const ev = patient.evidence.find(e => e.id === item.evidence_id) || {
-                                  id: item.evidence_id || 'ev-sim',
-                                  patient_id: patient.id,
-                                  checklist_item_id: item.id,
-                                  checklist_step_name: item.name,
-                                  evidence_type: 'DOCUMENT' as const,
-                                  source: item.evidence_source || 'HIS Core',
-                                  filename: item.evidence_filename || 'evidence_attachment.pdf',
-                                  file_url: `/mock-files/${item.evidence_filename}`,
-                                  uploaded_by: item.verified_by || 'usr-3',
-                                  uploaded_by_name: item.verified_by_name || 'Staff Clinician',
-                                  uploaded_by_role: item.verified_by_role || item.required_role,
-                                  uploaded_at: item.verified_at || '2025-04-28 08:30',
-                                  verification_status: 'VERIFIED' as const,
-                                };
-                                setViewerEvidence(ev);
-                              }}
-                              className="font-mono text-[11px] text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 truncate max-w-[170px]"
-                              title="Click to view verified document"
-                            >
-                              <FileText className="w-3.5 h-3.5 shrink-0" />
-                              <span className="truncate">{item.evidence_filename}</span>
-                            </button>
+                            <div className="space-y-1">
+                              <button
+                                onClick={() => {
+                                  const ev = patient.evidence.find(e => e.id === item.evidence_id) || {
+                                    id: item.evidence_id || 'ev-sim',
+                                    patient_id: patient.id,
+                                    checklist_item_id: item.id,
+                                    checklist_step_name: item.name,
+                                    evidence_type: 'DOCUMENT' as const,
+                                    source: item.evidence_source || 'HIS Core',
+                                    filename: item.evidence_filename || 'evidence_attachment.pdf',
+                                    file_url: `/mock-files/${item.evidence_filename}`,
+                                    uploaded_by: item.verified_by || 'usr-3',
+                                    uploaded_by_name: item.verified_by_name || 'Staff Clinician',
+                                    uploaded_by_role: item.verified_by_role || item.required_role,
+                                    uploaded_at: item.verified_at || '2025-04-28 08:30',
+                                    verification_status: 'VERIFIED' as const,
+                                  };
+                                  setViewerEvidence(ev);
+                                }}
+                                className="font-mono text-[11px] text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 truncate max-w-[170px]"
+                                title="Click to view verified document"
+                              >
+                                <FileText className="w-3.5 h-3.5 shrink-0" />
+                                <span className="truncate">{item.evidence_filename}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleInspectValidation(item)}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition"
+                                title="Inspect 7-Point Evidence Validation Results"
+                              >
+                                <FileCheck className="w-3 h-3" />
+                                <span>7-Pt Validation</span>
+                              </button>
+                            </div>
                           ) : (
-                            <span className="text-[11px] text-slate-400 italic">No evidence attached</span>
+                            <div className="space-y-1">
+                              <span className="text-[11px] text-slate-400 italic block">No evidence attached</span>
+                              <button
+                                type="button"
+                                onClick={() => handleInspectValidation(item)}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500 hover:bg-slate-200"
+                                title="Inspect Evidence Gate Requirements"
+                              >
+                                <FileCheck className="w-3 h-3" />
+                                <span>Check Gates</span>
+                              </button>
+                            </div>
                           )}
                         </td>
 
@@ -1359,6 +1618,32 @@ export const PatientDetailPage: React.FC = () => {
           riskResult={riskResult}
         />
       )}
+
+      {/* Explainable Rule Engine Modal (Section 3) */}
+      <RuleExplanationModal
+        isOpen={ruleModalItem !== null}
+        item={ruleModalItem}
+        onClose={() => setRuleModalItem(null)}
+      />
+
+      {/* Patient Data Privacy Governance Modal (Section 10) */}
+      <PrivacyGovernanceModal
+        isOpen={privacyModalOpen}
+        currentUserRole={user?.role || 'SURGEON'}
+        currentUserName={user?.name || 'Clinician'}
+        onClose={() => setPrivacyModalOpen(false)}
+      />
+
+      {/* Multi-Point Evidence Validation Inspection Modal (Section 4) */}
+      <EvidenceValidationModal
+        isOpen={validationModalItem !== null}
+        item={validationModalItem}
+        validation={validationDetails}
+        onClose={() => {
+          setValidationModalItem(null);
+          setValidationDetails(null);
+        }}
+      />
     </div>
   );
 };

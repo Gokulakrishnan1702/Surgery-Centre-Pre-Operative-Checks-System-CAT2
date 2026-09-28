@@ -107,6 +107,32 @@ router.post('/:id/final-approval', authenticateToken, requirePermission('FINAL_A
   }
 });
 
+// GET /api/patients/:id/readiness (Pre-Operative Readiness Gate Status)
+router.get('/:id/readiness', authenticateToken, requirePermission('VIEW_PATIENTS'), (req: AuthRequest, res: Response) => {
+  const id = getParam(req.params.id);
+  try {
+    const readiness = store.getPreOpReadiness(id);
+    return res.json(readiness);
+  } catch (err: any) {
+    return res.status(404).json({ error: err.message });
+  }
+});
+
+// POST /api/patients/:id/final-clearance (Human Authorized Pre-Op Surgical Sign-off)
+router.post('/:id/final-clearance', authenticateToken, requirePermission('FINAL_APPROVAL'), (req: AuthRequest, res: Response) => {
+  const id = getParam(req.params.id);
+  const { notes } = req.body;
+  try {
+    const updated = store.finalSurgicalClearance(id, req.user!, notes);
+    return res.json({
+      message: 'Final pre-operative clearance authorized by human surgical specialist.',
+      patient: updated
+    });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
 // GET /api/patients/:id/history
 router.get('/:id/history', authenticateToken, requirePermission('VIEW_PATIENTS'), (req: AuthRequest, res: Response) => {
   const id = getParam(req.params.id);

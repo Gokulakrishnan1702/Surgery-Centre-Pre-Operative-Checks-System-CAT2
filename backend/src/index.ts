@@ -21,6 +21,9 @@ import usersRoutes from './routes/users';
 import settingsRoutes from './routes/settings';
 import notificationsRoutes from './routes/notifications';
 import modelsRoutes from './routes/models';
+import experimentRoutes from './routes/experiment';
+import safetylabRoutes from './routes/safetylab';
+import validationRoutes from './routes/validation';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -48,6 +51,9 @@ app.use('/api/users', usersRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/models', modelsRoutes);
+app.use('/api/experiment', experimentRoutes);
+app.use('/api/safety-lab', safetylabRoutes);
+app.use('/api/validation', validationRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

@@ -19,7 +19,13 @@ import {
   LabResultRecord,
   RiskHistoryRecord,
   ChecklistHistoryRecord,
-  PatientHistoryResponse
+  PatientHistoryResponse,
+  PreOpReadinessGate,
+  EvidenceValidationDetails,
+  ErrorAnalysisItem,
+  SafetyLabTestCase,
+  StakeholderValidationSummary,
+  DeploymentReadinessReport
 } from '../types';
 
 const API_BASE = '/api';
@@ -153,6 +159,13 @@ export const api = {
     getChecklistHistory: (id: string) => fetchWithAuth<ChecklistHistoryRecord[]>(`/patients/${id}/checklist-history`),
     exportHistoryUrl: (id: string, format: string = 'csv') =>
       `/api/patients/${id}/history/export?format=${format}`,
+    getReadiness: (id: string) =>
+      fetchWithAuth<PreOpReadinessGate>(`/patients/${id}/readiness`),
+    finalClearance: (id: string, notes?: string) =>
+      fetchWithAuth<{ message: string; patient: Patient }>(`/patients/${id}/final-clearance`, {
+        method: 'POST',
+        body: JSON.stringify({ notes }),
+      }),
   },
 
   checklist: {
@@ -193,6 +206,13 @@ export const api = {
       fetchWithAuth<{ message: string; item: ChecklistItem }>(`/checklist/${itemId}/confirm`, {
         method: 'POST',
         body: JSON.stringify({ comment, decision: 'APPROVED' }),
+      }),
+    getRule: (itemId: string) =>
+      fetchWithAuth<{ item_id: string; item_name: string; rule: any }>(`/checklist/${itemId}/rule`),
+    validateEvidence: (itemId: string, evidenceId?: string) =>
+      fetchWithAuth<EvidenceValidationDetails>(`/checklist/${itemId}/validate-evidence`, {
+        method: 'POST',
+        body: JSON.stringify({ evidenceId }),
       }),
   },
 
@@ -403,5 +423,23 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify({ role }),
       }),
-  }
+  },
+
+  experiment: {
+    getMetrics: () => fetchWithAuth<ExperimentDataset>('/experiment/metrics'),
+    getErrors: () => fetchWithAuth<ErrorAnalysisItem[]>('/experiment/errors'),
+  },
+
+  safetyLab: {
+    list: () => fetchWithAuth<SafetyLabTestCase[]>('/safety-lab'),
+    runTest: (id: string) =>
+      fetchWithAuth<{ message: string; result: SafetyLabTestCase }>(`/safety-lab/run/${id}`, {
+        method: 'POST',
+      }),
+  },
+
+  validation: {
+    getStakeholder: () => fetchWithAuth<StakeholderValidationSummary>('/validation/stakeholder'),
+    getDeploymentReadiness: () => fetchWithAuth<DeploymentReadinessReport>('/validation/deployment-readiness'),
+  },
 };

@@ -15,7 +15,11 @@ import {
   Settings,
   ShieldCheck,
   ShieldAlert,
-  Info
+  Info,
+  FlaskConical,
+  Terminal,
+  UserCheck,
+  CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -32,6 +36,10 @@ export const Sidebar: React.FC = () => {
     { label: 'Overrides', path: '/overrides', icon: ShieldAlert },
     { label: 'Audit Log', path: '/audit-log', icon: History },
     { label: 'Analytics', path: '/analytics', icon: BarChart3 },
+    { label: 'Experiment & Errors', path: '/experiment', icon: FlaskConical },
+    { label: 'Safety Test Lab', path: '/safety-lab', icon: Terminal },
+    { label: 'User Validation', path: '/stakeholder-validation', icon: UserCheck },
+    { label: 'Deployment Checklist', path: '/deployment-readiness', icon: CheckCircle2 },
     { label: 'AI Models & Governance', path: '/models', icon: Cpu },
     { label: 'Bias & Fairness', path: '/fairness', icon: Scale },
     { label: 'Users & Roles', path: '/users', icon: UserCog },

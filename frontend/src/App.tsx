@@ -19,6 +19,10 @@ import { FairnessPage } from './pages/FairnessPage';
 import { UsersPage } from './pages/UsersPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ChecklistsPage } from './pages/ChecklistsPage';
+import { ExperimentPage } from './pages/ExperimentPage';
+import { SafetyLabPage } from './pages/SafetyLabPage';
+import { StakeholderValidationPage } from './pages/StakeholderValidationPage';
+import { DeploymentReadinessPage } from './pages/DeploymentReadinessPage';
 
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -48,6 +52,10 @@ export function App() {
             <Route path="overrides" element={<ProtectedRoute requiredPermission="VIEW_EXCEPTIONS"><OverridesPage /></ProtectedRoute>} />
             <Route path="audit-log" element={<ProtectedRoute requiredPermission="VIEW_AUDIT"><AuditLogPage /></ProtectedRoute>} />
             <Route path="analytics" element={<ProtectedRoute requiredPermission="VIEW_ANALYTICS"><AnalyticsPage /></ProtectedRoute>} />
+            <Route path="experiment" element={<ProtectedRoute><ExperimentPage /></ProtectedRoute>} />
+            <Route path="safety-lab" element={<ProtectedRoute><SafetyLabPage /></ProtectedRoute>} />
+            <Route path="stakeholder-validation" element={<ProtectedRoute><StakeholderValidationPage /></ProtectedRoute>} />
+            <Route path="deployment-readiness" element={<ProtectedRoute><DeploymentReadinessPage /></ProtectedRoute>} />
             <Route path="models" element={<ProtectedRoute requiredPermission="VIEW_MODELS"><ModelsPage /></ProtectedRoute>} />
             <Route path="fairness" element={<ProtectedRoute requiredPermission="VIEW_BIAS"><FairnessPage /></ProtectedRoute>} />
             <Route path="users" element={<ProtectedRoute requiredPermission="MANAGE_USERS"><UsersPage /></ProtectedRoute>} />
