@@ -2795,7 +2795,16 @@ class DataStore {
 
     const calcGroupMetrics = (pts: Patient[]) => {
       const cases = pts.length;
-      if (!cases) return { cases: 0, completion_rate: 0, exception_rate: 0, evidence_verification_rate: 0, human_confirmation_rate: 0, false_negative_rate: 0 };
+      if (!cases) return {
+        cases: 0,
+        completion_rate: 0,
+        exception_rate: 0,
+        evidence_verification_rate: 0,
+        human_confirmation_rate: 0,
+        false_negative_rate: 0,
+        false_completion_rate: 0,
+        override_rate: 0
+      };
 
       const pIds = new Set(pts.map(p => p.id));
       const items = this.checklistItems.filter(ci => pIds.has(ci.patient_id));
@@ -2803,12 +2812,16 @@ class DataStore {
 
       const verified = items.filter(ci => ci.status === 'VERIFIED' || ci.status === 'OVERRIDE').length;
       const exceptions = items.filter(ci => ci.status === 'EXCEPTION').length;
+      const evidenceReq = items.filter(i => i.requires_evidence).length || 1;
       const evidenceVerified = items.filter(ci => ci.evidence_id && (ci.status === 'VERIFIED' || ci.status === 'OVERRIDE')).length;
       const humanConfirmed = items.filter(ci => ci.human_confirmed).length;
+      const humanReq = items.filter(i => i.requires_human_confirmation).length || 1;
+      const overrides = items.filter(ci => ci.status === 'OVERRIDE').length;
+      const falseCompleted = items.filter(ci => ci.requires_evidence && (ci.status === 'VERIFIED' || ci.status === 'OVERRIDE') && !ci.evidence_id).length;
       const falseNegatives = pts.filter(p => p.risk_level === 'CRITICAL' && p.status === 'READY').length;
 
       const jitter = (val: number) => {
-        let newVal = val + (Math.random() * 6 - 3);
+        let newVal = val + (Math.random() * 2 - 1);
         if (newVal < 0) newVal = 0;
         if (newVal > 100) newVal = 100;
         return +(newVal).toFixed(1);
@@ -2818,9 +2831,11 @@ class DataStore {
         cases,
         completion_rate: jitter(+((verified / totalItems) * 100)),
         exception_rate: jitter(+((exceptions / totalItems) * 100)),
-        evidence_verification_rate: jitter(+((evidenceVerified / (items.filter(i => i.requires_evidence).length || 1)) * 100)),
-        human_confirmation_rate: jitter(+((humanConfirmed / (items.filter(i => i.requires_human_confirmation).length || 1)) * 100)),
-        false_negative_rate: +((falseNegatives / cases) * 2.5).toFixed(1)
+        evidence_verification_rate: jitter(+((evidenceVerified / evidenceReq) * 100)),
+        human_confirmation_rate: jitter(+((humanConfirmed / humanReq) * 100)),
+        false_negative_rate: +((falseNegatives / cases) * 2.5).toFixed(1),
+        false_completion_rate: +((falseCompleted / evidenceReq) * 100).toFixed(1),
+        override_rate: +((overrides / totalItems) * 100).toFixed(1)
       };
     };
 
@@ -2832,14 +2847,34 @@ class DataStore {
     const evDiff = +(Math.abs(ga.evidence_verification_rate - gb.evidence_verification_rate)).toFixed(1);
     const hcDiff = +(Math.abs(ga.human_confirmation_rate - gb.human_confirmation_rate)).toFixed(1);
     const fnDiff = +(Math.abs(ga.false_negative_rate - gb.false_negative_rate)).toFixed(1);
+    const fcrDiff = +(Math.abs(ga.false_completion_rate - gb.false_completion_rate)).toFixed(1);
+    const overrideDisp = +(Math.abs(ga.override_rate - gb.override_rate)).toFixed(1);
+    const dirVal = +((gb.evidence_verification_rate / (ga.evidence_verification_rate || 1))).toFixed(2);
+    const spd = +(ga.completion_rate - gb.completion_rate).toFixed(1);
 
-    const maxDisp = Math.max(compDiff, excDiff, evDiff, hcDiff, fnDiff);
+    const maxDisp = Math.max(compDiff, excDiff, evDiff, hcDiff, fnDiff, overrideDisp);
+
+    const flags: string[] = [];
+    const recommendations: string[] = [];
+
+    if (overrideDisp > threshold) {
+      flags.push(`Override disparity (${overrideDisp}%) exceeds fairness threshold of ${threshold}%.`);
+      recommendations.push('Investigate reliance on emergency bypass overrides in regional cohort.');
+    }
+    if (fcrDiff > 5.0) {
+      flags.push(`False-completion rate disparity (${fcrDiff}%) exceeds safety tolerance (5.0%).`);
+      recommendations.push('Enforce strict cryptographic evidence gating before certifying pre-op steps.');
+    }
+    if (dirVal < 0.80 || dirVal > 1.25) {
+      flags.push(`Disparate Impact Ratio (${dirVal}) breaches the 80% (0.80-1.25) equity boundary.`);
+      recommendations.push('Standardize pre-op diagnostic turnarounds and specialist coverage across clinical sites.');
+    }
 
     return {
       test_date: new Date().toISOString().split('T')[0],
       dataset_size: this.patients.length,
       threshold_used: threshold,
-      result: maxDisp <= threshold ? 'PASSED' : 'FLAGGED',
+      result: maxDisp <= threshold && fcrDiff <= 5.0 ? 'PASSED' : 'FLAGGED',
       group_a: { name: 'Cohort Alpha (Urban / Tier-1)', ...ga },
       group_b: { name: 'Cohort Beta (Regional / Tier-2)', ...gb },
       differences: {
@@ -2848,8 +2883,14 @@ class DataStore {
         evidence_verification_rate_diff: evDiff,
         human_confirmation_rate_diff: hcDiff,
         false_negative_rate_diff: fnDiff,
+        false_completion_rate_diff: fcrDiff,
+        override_disparity: overrideDisp,
+        disparate_impact_ratio: dirVal,
+        statistical_parity_difference: spd,
         max_disparity: maxDisp
-      }
+      },
+      flags,
+      remediation_recommendations: recommendations
     };
   }
 

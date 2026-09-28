@@ -29,3 +29,14 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Python & Databases
+__pycache__/
+*.py[cod]
+*$py.class
+*.db
+*.sqlite
+*.sqlite3
+.pytest_cache/
+.coverage
+htmlcov/

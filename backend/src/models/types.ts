@@ -337,6 +337,8 @@ export interface FairnessEvaluation {
     evidence_verification_rate: number;
     human_confirmation_rate: number;
     false_negative_rate: number;
+    false_completion_rate?: number;
+    override_rate?: number;
   };
   group_b: {
     name: string;
@@ -346,6 +348,8 @@ export interface FairnessEvaluation {
     evidence_verification_rate: number;
     human_confirmation_rate: number;
     false_negative_rate: number;
+    false_completion_rate?: number;
+    override_rate?: number;
   };
   differences: {
     completion_rate_diff: number;
@@ -353,8 +357,14 @@ export interface FairnessEvaluation {
     evidence_verification_rate_diff: number;
     human_confirmation_rate_diff: number;
     false_negative_rate_diff: number;
+    false_completion_rate_diff?: number;
+    override_disparity?: number;
+    disparate_impact_ratio?: number;
+    statistical_parity_difference?: number;
     max_disparity: number;
   };
+  flags?: string[];
+  remediation_recommendations?: string[];
 }
 
 export interface ExperimentDataset {

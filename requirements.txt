@@ -1,0 +1,8 @@
+# SurgiGate Python Architecture, Migrations, Bias Protocol & Test Suite Dependencies
+SQLAlchemy>=2.0.30
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
+alembic>=1.13.0
+psycopg2-binary>=2.9.9
+pytest>=8.0.0
+pytest-cov>=4.1.0

@@ -53,30 +53,41 @@ This platform implements an evidence-backed verification engine where high-risk 
 project-root/
 ├── frontend/                     # React + Vite + Tailwind UI
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── common/           # KpiCard, StatusBadge, RiskBadge, WorkflowStepper
-│   │   │   ├── layout/           # Sidebar (Navy), Topbar (Role Switcher), AppLayout
-│   │   │   └── modals/           # ConfirmationModal, OverrideModal, EvidenceUploadModal, EvidenceViewerModal
+│   │   ├── components/           # KpiCard, StatusBadge, RiskBadge, WorkflowStepper
 │   │   ├── context/              # AuthContext (Role switching, permissions, JWT session)
-│   │   ├── pages/                # Dashboard, Patients, PatientDetail, Evidence, Exceptions, Overrides, Audit, Analytics, Fairness, Users, Settings
-│   │   ├── services/             # api.ts (Centralized REST API client)
-│   │   └── types/                # index.ts (Domain models and enums)
+│   │   ├── pages/                # Dashboard, Patients, PatientDetail, Evidence, Exceptions, Overrides, Audit, Analytics, Fairness
+│   │   └── services/             # api.ts (Centralized REST API client)
 │   ├── package.json
 │   └── vite.config.ts
 ├── backend/                      # Node.js + Express API
 │   ├── src/
-│   │   ├── config/               # db.ts (PostgreSQL pool configuration)
 │   │   ├── middleware/           # auth.ts (JWT authentication & RBAC guards)
 │   │   ├── models/               # types.ts (Data contracts)
-│   │   ├── routes/               # auth, patients, checklist, evidence, exceptions, overrides, audit, analytics, fairness, users
+│   │   ├── routes/               # auth, patients, checklist, evidence, exceptions, overrides, audit, analytics, fairness
 │   │   ├── services/             # store.ts (Master synthetic clinical data engine & analytics)
-│   │   ├── scripts/              # seed.ts (Automated database population script)
 │   │   └── index.ts              # Express server entry point
 │   ├── package.json
 │   └── tsconfig.json
-├── database/
-│   └── schema/
-│       └── schema.sql            # Full PostgreSQL DDL (tables, constraints, indexes)
+├── database/                     # Executable Database Layer & Migrations
+│   ├── models.py                 # Executable SQLAlchemy 2.0 ORM domain models
+│   ├── schemas.py                # Executable Pydantic v2 validation contracts
+│   ├── migrate.py                # Migration CLI runner (up, down, test-cycle)
+│   ├── migrations/               # Alembic versioned migration environment
+│   │   ├── env.py                # Dynamic DB configuration and metadata binding
+│   │   └── versions/             # Versioned migration revisions (001_initial_schema.py)
+│   └── schema/schema.sql         # PostgreSQL DDL reference
+├── evaluations/                  # Formal Algorithmic Bias Evaluation Engine
+│   └── bias_protocol.py          # Quantifiable metrics (FCR, Override Disparity, DIR, SPD)
+├── docs/
+│   └── BIAS_EVALUATION_PROTOCOL.md # Formal Health Equity & Parity Specification
+├── tests/                        # Automated Pytest Suite (Safety Guards & Protocol)
+│   ├── conftest.py               # In-memory SQLite fixtures & clinical seed datasets
+│   ├── test_safety_guards.py     # Safety guards 1-5 (Expired evidence, duplicate entries, role gating)
+│   ├── test_bias_evaluation.py   # Mathematical and threshold tests for FCR, OD, DIR
+│   └── test_models_and_schemas.py# Pydantic v2 and SQLAlchemy ORM relationship tests
+├── alembic.ini                   # Alembic database configuration
+├── pytest.ini                    # Pytest test configuration
+├── requirements.txt              # Python dependencies
 └── README.md
 ```
 
@@ -125,6 +136,31 @@ npm run dev
 ```
 - Client starts at `http://localhost:3000`
 - Proxies `/api` calls directly to `http://localhost:5000`.
+
+### Step 3: Run Database Migrations (Alembic)
+Executable SQLAlchemy 2.0 ORM domain models and versioned Alembic migration scripts back up the system architecture:
+```bash
+# Apply migrations to HEAD
+python database/migrate.py up
+
+# Check migration revision history
+python database/migrate.py history
+
+# Run automated upgrade/downgrade lifecycle test
+python database/migrate.py test-cycle
+```
+
+### Step 4: Run Automated Test Suite (pytest)
+An automated test suite validates the core safety guards, formal bias protocol, and domain schemas:
+```bash
+pytest
+```
+- Covers **Expired Evidence Rejection** (schema and runtime guards)
+- Covers **Duplicate Checklist Entry Prevention** (database uniqueness constraints & service deduplication)
+- Covers **Role-Gated Specialist Attestation** (RBAC enforcement & unauthorized rejection)
+- Covers **Missing Evidence Rejection** on high-risk milestones
+- Covers **Controlled Override Enforcement** (clinical + business dual-justification)
+- Covers **Formal Bias Protocol Metrics** (False-Completion Rate, Override Disparity, 4/5ths Rule)
 
 ---
 
